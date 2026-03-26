@@ -54,10 +54,12 @@ module.exports = (io) => {
       );
     }
 
-    // Notify everyone of updated participant list
+    // Notify everyone of updated participant list + current host
+    const hostInfo = await Room.findOne({ roomId }, "hostName");
     io.to(roomId).emit("room:participant-joined", {
       name,
       participants: room.participants,
+      hostName: hostInfo?.hostName || room.hostName,
     });
 
     // Send current video state to the joiner
@@ -89,6 +91,44 @@ module.exports = (io) => {
     // Register event handlers
     chatHandlers(io, socket, roomId, name);
     videoHandlers(io, socket, roomId);
+
+    // Host can kick a participant
+    socket.on("room:kick", async ({ socketId: targetSocketId }) => {
+      const currentRoom = await Room.findOne({ roomId });
+      if (!currentRoom || currentRoom.hostSocketId !== socket.id) return; // only host can kick
+      if (targetSocketId === socket.id) return; // can't kick yourself
+
+      const target = currentRoom.participants.find(
+        (p) => p.socketId === targetSocketId
+      );
+      if (!target) return;
+
+      // Notify the kicked user
+      io.to(targetSocketId).emit("room:kicked", {
+        reason: "You were removed by the host",
+      });
+
+      // Force disconnect the kicked user's socket
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        targetSocket.leave(roomId);
+        targetSocket.disconnect(true);
+      }
+
+      // Remove from DB
+      const updatedRoom = await Room.findOneAndUpdate(
+        { roomId },
+        { $pull: { participants: { socketId: targetSocketId } } },
+        { new: true }
+      );
+
+      if (updatedRoom) {
+        io.to(roomId).emit("room:participant-left", {
+          name: target.name,
+          participants: updatedRoom.participants,
+        });
+      }
+    });
 
     // Handle disconnect
     socket.on("disconnect", async () => {
