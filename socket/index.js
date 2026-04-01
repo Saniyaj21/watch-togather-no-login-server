@@ -2,6 +2,7 @@ const Room = require("../models/Room");
 const Message = require("../models/Message");
 const chatHandlers = require("./chatHandlers");
 const videoHandlers = require("./videoHandlers");
+const seenState = require("./seenState");
 
 module.exports = (io) => {
   io.on("connection", async (socket) => {
@@ -90,7 +91,7 @@ module.exports = (io) => {
 
     // Register event handlers
     chatHandlers(io, socket, roomId, name);
-    videoHandlers(io, socket, roomId);
+    videoHandlers(io, socket, roomId, name);
 
     // Host can kick a participant
     socket.on("room:kick", async ({ socketId: targetSocketId }) => {
@@ -166,6 +167,10 @@ module.exports = (io) => {
 
       // Clear typing status
       socket.to(roomId).emit("chat:user-typing", { name, isTyping: false });
+
+      // Clear seen state
+      seenState.remove(roomId, socket.id);
+      io.to(roomId).emit("chat:seen-update", { seenData: seenState.getList(roomId) });
     });
   });
 };

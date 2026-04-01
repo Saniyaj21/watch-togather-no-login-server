@@ -17,7 +17,7 @@ function isValidUrl(val) {
   }
 }
 
-module.exports = (io, socket, roomId) => {
+module.exports = (io, socket, roomId, name) => {
   socket.on("video:change", async ({ url, videoType }) => {
     if (!videoLimiter(socket.id)) return;
     if (!isValidUrl(url)) return;
@@ -53,6 +53,7 @@ module.exports = (io, socket, roomId) => {
     socket.to(roomId).emit("video:played", {
       currentTime,
       serverTimestamp: Date.now(),
+      name,
     });
   });
 
@@ -69,7 +70,7 @@ module.exports = (io, socket, roomId) => {
       }
     );
 
-    socket.to(roomId).emit("video:paused", { currentTime });
+    socket.to(roomId).emit("video:paused", { currentTime, name });
   });
 
   socket.on("video:seek", async ({ currentTime }) => {
@@ -84,6 +85,6 @@ module.exports = (io, socket, roomId) => {
       }
     );
 
-    socket.to(roomId).emit("video:seeked", { currentTime });
+    socket.to(roomId).emit("video:seeked", { currentTime, name });
   });
 };
