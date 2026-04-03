@@ -1,27 +1,154 @@
 const Message = require("../models/Message");
-const { chatLimiter } = require("../utils/socketRateLimit");
+const Room = require("../models/Room");
+const { chatLimiter, paginationLimiter } = require("../utils/socketRateLimit");
 const seenState = require("./seenState");
 
 const MAX_MESSAGE_LENGTH = 2000;
+const PAGE_SIZE = 30;
 
 module.exports = (io, socket, roomId, name) => {
-  socket.on("chat:send", async ({ text }) => {
+  socket.on("chat:send", async ({ text, replyToMessageId }) => {
     if (!chatLimiter(socket.id)) return;
     if (!text || typeof text !== "string") return;
     const trimmed = text.trim();
     if (!trimmed || trimmed.length > MAX_MESSAGE_LENGTH) return;
 
+    let replyTo = null;
+    if (replyToMessageId) {
+      try {
+        const original = await Message.findOne({
+          _id: replyToMessageId,
+          roomId,
+        }).lean();
+        if (original && !original.isDeleted) {
+          replyTo = {
+            messageId: original._id,
+            senderName: original.senderName,
+            textSnippet: original.text.slice(0, 80),
+          };
+        }
+      } catch {
+        // invalid id — ignore replyTo
+      }
+    }
+
     const message = await Message.create({
       roomId,
       senderName: name,
       text: trimmed,
+      replyTo: replyTo || undefined,
     });
 
     io.to(roomId).emit("chat:received", {
+      _id: message._id.toString(),
       senderName: message.senderName,
       text: message.text,
       createdAt: message.createdAt,
+      isDeleted: false,
+      editedAt: null,
+      replyTo: replyTo
+        ? {
+            messageId: replyTo.messageId.toString(),
+            senderName: replyTo.senderName,
+            textSnippet: replyTo.textSnippet,
+          }
+        : null,
     });
+  });
+
+  socket.on("chat:load-more", async ({ beforeCreatedAt }, callback) => {
+    if (typeof callback !== "function") return;
+    if (!paginationLimiter(socket.id)) return callback({ messages: [], hasMore: false });
+    try {
+      const date = new Date(beforeCreatedAt);
+      if (isNaN(date.getTime())) return callback({ messages: [], hasMore: false });
+
+      const messages = await Message.find({
+        roomId,
+        createdAt: { $lt: date },
+      })
+        .sort({ createdAt: -1 })
+        .limit(PAGE_SIZE + 1)
+        .lean();
+
+      const hasMore = messages.length > PAGE_SIZE;
+      const page = messages
+        .slice(0, PAGE_SIZE)
+        .reverse()
+        .map((m) => ({
+          _id: m._id.toString(),
+          senderName: m.senderName,
+          text: m.text,
+          createdAt: m.createdAt,
+          isDeleted: m.isDeleted || false,
+          editedAt: m.editedAt || null,
+          replyTo: m.replyTo && m.replyTo.messageId
+            ? {
+                messageId: m.replyTo.messageId.toString(),
+                senderName: m.replyTo.senderName,
+                textSnippet: m.replyTo.textSnippet,
+              }
+            : null,
+        }));
+
+      callback({ messages: page, hasMore });
+    } catch (e) {
+      callback({ messages: [], hasMore: false });
+    }
+  });
+
+  socket.on("chat:edit", async ({ messageId, newText }) => {
+    if (!chatLimiter(socket.id)) return;
+    if (!messageId || !newText || typeof newText !== "string") return;
+    const trimmed = newText.trim();
+    if (!trimmed || trimmed.length > MAX_MESSAGE_LENGTH) return;
+
+    try {
+      const message = await Message.findOne({ _id: messageId, roomId }).lean();
+      if (!message) return;
+      if (message.senderName !== name) return;
+      if (message.isDeleted) return;
+
+      const editedAt = new Date();
+      await Message.findOneAndUpdate(
+        { _id: messageId, roomId },
+        { text: trimmed, editedAt }
+      );
+
+      io.to(roomId).emit("chat:message-edited", {
+        messageId: messageId.toString(),
+        newText: trimmed,
+        editedAt: editedAt.toISOString(),
+      });
+    } catch {
+      // invalid id — ignore
+    }
+  });
+
+  socket.on("chat:delete", async ({ messageId }) => {
+    if (!chatLimiter(socket.id)) return;
+    if (!messageId) return;
+
+    try {
+      const message = await Message.findOne({ _id: messageId, roomId }).lean();
+      if (!message) return;
+
+      // Allow sender or host to delete
+      const room = await Room.findOne({ roomId }, "hostSocketId").lean();
+      const isHost = room && room.hostSocketId === socket.id;
+      if (message.senderName !== name && !isHost) return;
+
+      await Message.findOneAndUpdate(
+        { _id: messageId, roomId },
+        { isDeleted: true, text: "" }
+      );
+
+      io.to(roomId).emit("chat:message-deleted", {
+        messageId: messageId.toString(),
+      });
+    } catch {
+      // invalid id — ignore
+    }
   });
 
   socket.on("chat:typing", ({ isTyping }) => {

@@ -26,4 +26,7 @@ const chatLimiter = createSocketRateLimiter(10, 10000);
 // Video control: max 20 events per 10 seconds
 const videoLimiter = createSocketRateLimiter(20, 10000);
 
-module.exports = { chatLimiter, videoLimiter };
+// Pagination: max 10 requests per 60 seconds
+const paginationLimiter = createSocketRateLimiter(10, 60000);
+
+module.exports = { chatLimiter, videoLimiter, paginationLimiter };

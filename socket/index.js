@@ -2,6 +2,7 @@ const Room = require("../models/Room");
 const Message = require("../models/Message");
 const chatHandlers = require("./chatHandlers");
 const videoHandlers = require("./videoHandlers");
+const queueHandlers = require("./queueHandlers");
 const seenState = require("./seenState");
 
 module.exports = (io) => {
@@ -82,16 +83,45 @@ module.exports = (io) => {
       });
     }
 
-    // Send recent chat messages
+    // Send recent chat messages (paginated shape)
     const recentMessages = await Message.find({ roomId })
       .sort({ createdAt: -1 })
-      .limit(50)
+      .limit(51)
       .lean();
-    socket.emit("chat:history", recentMessages.reverse());
+
+    const hasMore = recentMessages.length > 50;
+    const msgs = recentMessages
+      .slice(0, 50)
+      .reverse()
+      .map((m) => ({
+        _id: m._id.toString(),
+        senderName: m.senderName,
+        text: m.text,
+        createdAt: m.createdAt,
+        isDeleted: m.isDeleted || false,
+        editedAt: m.editedAt || null,
+        replyTo:
+          m.replyTo && m.replyTo.messageId
+            ? {
+                messageId: m.replyTo.messageId.toString(),
+                senderName: m.replyTo.senderName,
+                textSnippet: m.replyTo.textSnippet,
+              }
+            : null,
+      }));
+
+    socket.emit("chat:history", { messages: msgs, hasMore });
+
+    // Send queue state to the joiner
+    socket.emit("queue:state", {
+      queue: room.queue || [],
+      currentQueueIndex: room.currentQueueIndex != null ? room.currentQueueIndex : -1,
+    });
 
     // Register event handlers
     chatHandlers(io, socket, roomId, name);
     videoHandlers(io, socket, roomId, name);
+    queueHandlers(io, socket, roomId, name);
 
     // Host can kick a participant
     socket.on("room:kick", async ({ socketId: targetSocketId }) => {

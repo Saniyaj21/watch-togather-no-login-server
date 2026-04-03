@@ -5,7 +5,7 @@ const roomSchema = new mongoose.Schema({
   hostSocketId: { type: String, default: null },
   hostName: { type: String, default: "" },
   videoUrl: { type: String, default: null },
-  videoType: { type: String, enum: ["youtube", "iframe"], default: null },
+  videoType: { type: String, enum: ["youtube", "direct", "iframe"], default: null },
   videoState: {
     isPlaying: { type: Boolean, default: false },
     currentTime: { type: Number, default: 0 },
@@ -18,6 +18,15 @@ const roomSchema = new mongoose.Schema({
       joinedAt: { type: Date, default: Date.now },
     },
   ],
+  queue: [
+    {
+      url: { type: String, required: true },
+      videoType: { type: String, enum: ["youtube", "direct", "iframe"] },
+      addedBy: { type: String },
+      addedAt: { type: Date, default: Date.now },
+    },
+  ],
+  currentQueueIndex: { type: Number, default: -1 },
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
   lastActivityAt: { type: Date, default: Date.now },

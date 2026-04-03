@@ -21,7 +21,7 @@ module.exports = (io, socket, roomId, name) => {
   socket.on("video:change", async ({ url, videoType }) => {
     if (!videoLimiter(socket.id)) return;
     if (!isValidUrl(url)) return;
-    const safeType = videoType === "youtube" ? "youtube" : "iframe";
+    const safeType = videoType === "youtube" ? "youtube" : videoType === "direct" ? "direct" : "iframe";
 
     await Room.findOneAndUpdate(
       { roomId },
