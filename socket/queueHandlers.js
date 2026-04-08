@@ -114,8 +114,6 @@ module.exports = (io, socket, roomId, name) => {
 
     const room = await Room.findOne({ roomId });
     if (!room) return;
-    // Only host can jump to an index
-    if (room.hostSocketId !== socket.id) return;
     if (index >= room.queue.length) return;
 
     const item = room.queue[index];

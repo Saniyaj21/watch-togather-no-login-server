@@ -48,11 +48,17 @@ module.exports = (io) => {
       { new: true }
     );
 
-    // If this is the first/only participant, set them as host
-    if (room.participants.length === 1) {
+    // If no host yet (new room), assign this person as host
+    // If rejoining as the original host, refresh their socket ID
+    if (!room.hostName || room.participants.length === 1) {
       await Room.findOneAndUpdate(
         { roomId },
         { hostSocketId: socket.id, hostName: name }
+      );
+    } else if (room.hostName === name) {
+      await Room.findOneAndUpdate(
+        { roomId },
+        { hostSocketId: socket.id }
       );
     }
 
@@ -175,19 +181,6 @@ module.exports = (io) => {
 
       // DON'T deactivate room on last disconnect — user may just be backgrounding
       // Room will be reactivated on reconnect, or cleaned up by TTL/cron later
-
-      // If the host left and others remain, promote next participant
-      if (
-        updatedRoom.participants.length > 0 &&
-        updatedRoom.hostSocketId === socket.id
-      ) {
-        const newHost = updatedRoom.participants[0];
-        await Room.findOneAndUpdate(
-          { roomId },
-          { hostSocketId: newHost.socketId, hostName: newHost.name }
-        );
-        io.to(roomId).emit("room:host-changed", { hostName: newHost.name });
-      }
 
       // Notify others
       io.to(roomId).emit("room:participant-left", {
