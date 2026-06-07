@@ -8,6 +8,7 @@ const connectDB = require("./config/db");
 const roomsRouter = require("./routes/rooms");
 const uploadRouter = require("./routes/upload");
 const initSocket = require("./socket");
+const { startImageCleanup } = require("./utils/imageCleanup");
 
 const app = express();
 const server = http.createServer(app);
@@ -47,4 +48,5 @@ connectDB().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
+  startImageCleanup();
 });

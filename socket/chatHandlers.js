@@ -2,6 +2,7 @@ const Message = require("../models/Message");
 const Room = require("../models/Room");
 const { chatLimiter, paginationLimiter } = require("../utils/socketRateLimit");
 const seenState = require("./seenState");
+const { deleteImageForMessage } = require("../utils/imageCleanup");
 
 // AES-GCM ciphertext for 2000-char plaintext is ~2710 chars; allow up to 4096
 const MAX_MESSAGE_LENGTH = 4096;
@@ -156,8 +157,10 @@ module.exports = (io, socket, roomId, name) => {
 
       await Message.findOneAndUpdate(
         { _id: messageId, roomId },
-        { isDeleted: true, text: "" }
+        { isDeleted: true, text: "", imageCleanedAt: message.imageUrl ? new Date() : null }
       );
+
+      if (message.imageUrl) deleteImageForMessage(message.imageUrl);
 
       io.to(roomId).emit("chat:message-deleted", {
         messageId: messageId.toString(),
