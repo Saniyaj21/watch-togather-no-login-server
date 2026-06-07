@@ -114,6 +114,7 @@ module.exports = (io) => {
                 textSnippet: m.replyTo.textSnippet,
               }
             : null,
+        imageUrl: m.imageUrl || null,
       }));
 
     socket.emit("chat:history", { messages: msgs, hasMore });

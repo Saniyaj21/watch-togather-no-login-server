@@ -6,6 +6,7 @@ const rateLimit = require("express-rate-limit");
 const { Server } = require("socket.io");
 const connectDB = require("./config/db");
 const roomsRouter = require("./routes/rooms");
+const uploadRouter = require("./routes/upload");
 const initSocket = require("./socket");
 
 const app = express();
@@ -30,6 +31,7 @@ app.use("/api/", apiLimiter);
 
 // Routes
 app.use("/api/rooms", roomsRouter);
+app.use("/api/upload", uploadRouter);
 
 app.get("/", (req, res) => {
   res.json({ status: "Watch Together server running" });

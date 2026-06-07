@@ -12,6 +12,7 @@ const messageSchema = new mongoose.Schema({
     senderName: { type: String, default: null },
     textSnippet: { type: String, default: null },
   },
+  imageUrl: { type: String, default: null },
 });
 
 // Auto-delete messages older than 24 hours

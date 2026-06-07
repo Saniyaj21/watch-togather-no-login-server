@@ -8,11 +8,16 @@ const MAX_MESSAGE_LENGTH = 4096;
 const PAGE_SIZE = 30;
 
 module.exports = (io, socket, roomId, name) => {
-  socket.on("chat:send", async ({ text, replyToMessageId, replyToSnippet }) => {
+  socket.on("chat:send", async ({ text, replyToMessageId, replyToSnippet, imageUrl }) => {
     if (!chatLimiter(socket.id)) return;
-    if (!text || typeof text !== "string") return;
-    const trimmed = text.trim();
-    if (!trimmed || trimmed.length > MAX_MESSAGE_LENGTH) return;
+
+    const hasText = text && typeof text === "string" && text.trim().length > 0;
+    const hasImage = imageUrl && typeof imageUrl === "string" &&
+      imageUrl.startsWith("https://res.cloudinary.com/") && imageUrl.length <= 500;
+    if (!hasText && !hasImage) return;
+
+    const trimmed = hasText ? text.trim() : "";
+    if (trimmed.length > MAX_MESSAGE_LENGTH) return;
 
     let replyTo = null;
     if (replyToMessageId) {
@@ -43,8 +48,9 @@ module.exports = (io, socket, roomId, name) => {
     const message = await Message.create({
       roomId,
       senderName: name,
-      text: trimmed,
+      text: trimmed || " ",
       replyTo: replyTo || undefined,
+      imageUrl: hasImage ? imageUrl : undefined,
     });
 
     io.to(roomId).emit("chat:received", {
@@ -61,6 +67,7 @@ module.exports = (io, socket, roomId, name) => {
             textSnippet: replyTo.textSnippet,
           }
         : null,
+      imageUrl: hasImage ? imageUrl : null,
     });
   });
 
@@ -97,6 +104,7 @@ module.exports = (io, socket, roomId, name) => {
                 textSnippet: m.replyTo.textSnippet,
               }
             : null,
+          imageUrl: m.imageUrl || null,
         }));
 
       callback({ messages: page, hasMore });
