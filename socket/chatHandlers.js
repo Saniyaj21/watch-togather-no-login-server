@@ -3,11 +3,12 @@ const Room = require("../models/Room");
 const { chatLimiter, paginationLimiter } = require("../utils/socketRateLimit");
 const seenState = require("./seenState");
 
-const MAX_MESSAGE_LENGTH = 2000;
+// AES-GCM ciphertext for 2000-char plaintext is ~2710 chars; allow up to 4096
+const MAX_MESSAGE_LENGTH = 4096;
 const PAGE_SIZE = 30;
 
 module.exports = (io, socket, roomId, name) => {
-  socket.on("chat:send", async ({ text, replyToMessageId }) => {
+  socket.on("chat:send", async ({ text, replyToMessageId, replyToSnippet }) => {
     if (!chatLimiter(socket.id)) return;
     if (!text || typeof text !== "string") return;
     const trimmed = text.trim();
@@ -21,10 +22,17 @@ module.exports = (io, socket, roomId, name) => {
           roomId,
         }).lean();
         if (original && !original.isDeleted) {
+          // Use the client-supplied encrypted snippet when provided; it preserves
+          // the original plaintext meaning. Fall back to slicing stored text only
+          // for unencrypted rooms (backward compatibility).
+          const snippet =
+            replyToSnippet && typeof replyToSnippet === "string" && replyToSnippet.length <= 300
+              ? replyToSnippet
+              : original.text.slice(0, 80);
           replyTo = {
             messageId: original._id,
             senderName: original.senderName,
-            textSnippet: original.text.slice(0, 80),
+            textSnippet: snippet,
           };
         }
       } catch {
@@ -101,7 +109,7 @@ module.exports = (io, socket, roomId, name) => {
     if (!chatLimiter(socket.id)) return;
     if (!messageId || !newText || typeof newText !== "string") return;
     const trimmed = newText.trim();
-    if (!trimmed || trimmed.length > MAX_MESSAGE_LENGTH) return;
+    if (!trimmed || trimmed.length > MAX_MESSAGE_LENGTH) return; // MAX_MESSAGE_LENGTH covers encrypted payloads
 
     try {
       const message = await Message.findOne({ _id: messageId, roomId }).lean();
