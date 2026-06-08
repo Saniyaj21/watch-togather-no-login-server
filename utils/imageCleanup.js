@@ -18,13 +18,17 @@ async function deleteCloudinaryImages(publicIds) {
   }
 }
 
-// Called immediately when a message with an image is manually deleted
-async function deleteImageForMessage(imageUrl) {
+// Called immediately when a message with an image is manually deleted.
+// Stamps imageCleanedAt only after confirmed deletion so the cron can retry on failure.
+async function deleteImageForMessage(imageUrl, messageId = null) {
   if (!imageUrl) return;
   const publicId = extractPublicId(imageUrl);
   if (!publicId) return;
   try {
     await cloudinary.uploader.destroy(publicId, { invalidate: true });
+    if (messageId) {
+      await Message.findByIdAndUpdate(messageId, { imageCleanedAt: new Date() });
+    }
   } catch (err) {
     console.error("[Cleanup] Failed to delete Cloudinary image:", err.message);
   }

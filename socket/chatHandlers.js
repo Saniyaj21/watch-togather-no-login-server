@@ -157,10 +157,10 @@ module.exports = (io, socket, roomId, name) => {
 
       await Message.findOneAndUpdate(
         { _id: messageId, roomId },
-        { isDeleted: true, text: "", imageCleanedAt: message.imageUrl ? new Date() : null }
+        { isDeleted: true, text: "" }
       );
 
-      if (message.imageUrl) deleteImageForMessage(message.imageUrl);
+      if (message.imageUrl) deleteImageForMessage(message.imageUrl, messageId);
 
       io.to(roomId).emit("chat:message-deleted", {
         messageId: messageId.toString(),
