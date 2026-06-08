@@ -3,7 +3,9 @@ const Message = require("../models/Message");
 
 function extractPublicId(url) {
   try {
-    const match = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i);
+    // Matches both legacy /upload/ URLs and new /authenticated/ signed URLs.
+    // Public IDs are always under the watch-together/ folder.
+    const match = url.match(/(watch-together\/[^.?/]+)\.[a-zA-Z0-9]+/);
     return match ? match[1] : null;
   } catch {
     return null;
@@ -13,7 +15,10 @@ function extractPublicId(url) {
 async function deleteCloudinaryImages(publicIds) {
   for (let i = 0; i < publicIds.length; i += 100) {
     const batch = publicIds.slice(i, i + 100);
-    await cloudinary.api.delete_resources(batch, { invalidate: true });
+    // Delete authenticated assets (new) and upload assets (legacy) in one pass.
+    // delete_resources returns { not found } for wrong-type assets rather than throwing.
+    await cloudinary.api.delete_resources(batch, { type: "authenticated", invalidate: true });
+    await cloudinary.api.delete_resources(batch, { type: "upload", invalidate: true });
     console.log(`[Cleanup] Deleted ${batch.length} Cloudinary image(s)`);
   }
 }
@@ -25,7 +30,11 @@ async function deleteImageForMessage(imageUrl, messageId = null) {
   const publicId = extractPublicId(imageUrl);
   if (!publicId) return;
   try {
-    await cloudinary.uploader.destroy(publicId, { invalidate: true });
+    // Both calls are needed to handle the transition from public upload assets to
+    // authenticated assets. destroy() resolves with { result: "not found" } for the
+    // wrong type rather than throwing, so both calls are always safe.
+    await cloudinary.uploader.destroy(publicId, { type: "authenticated", invalidate: true });
+    await cloudinary.uploader.destroy(publicId, { type: "upload", invalidate: true });
     if (messageId) {
       await Message.findByIdAndUpdate(messageId, { imageCleanedAt: new Date() });
     }

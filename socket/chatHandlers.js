@@ -14,7 +14,7 @@ module.exports = (io, socket, roomId, name) => {
 
     const hasText = text && typeof text === "string" && text.trim().length > 0;
     const hasImage = imageUrl && typeof imageUrl === "string" &&
-      imageUrl.startsWith("https://res.cloudinary.com/") && imageUrl.length <= 500;
+      imageUrl.startsWith("https://res.cloudinary.com/") && imageUrl.length <= 1000;
     if (!hasText && !hasImage) return;
 
     const trimmed = hasText ? text.trim() : "";
